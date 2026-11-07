@@ -22,9 +22,14 @@ desktop.ini
 voice-packs/
 node_modules/
 
-# Ignore local tooling used to publish this repo
+# Ignore publish helpers (local only, never part of the deliverable)
 .gh-token.json
+.device-code.txt
+.me.json
+.repo-create.json
 .gcm-login.txt
 .gcm-login.txt.err
-_gh_device_poll.py
 repo-list.json
+_gh_device_poll.py
+_gh_device_poll.ps1
+_publish.ps1
