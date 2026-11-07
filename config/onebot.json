@@ -1,0 +1,34 @@
+{
+  "_comment": "Template for /data/qqbot/config/onebot.json. Change every CHANGE_ME. SnowLuma OVERWRITES this file on first boot (docs/06-pitfalls.md P-05) - re-copy it after the container is up.",
+  "networks": {
+    "httpServers": [
+      {
+        "name": "http-default",
+        "enabled": true,
+        "host": "0.0.0.0",
+        "port": 3000,
+        "path": "/",
+        "accessToken": "CHANGE_ME_onebot_token",
+        "messageFormat": "array",
+        "reportSelfMessage": false
+      }
+    ],
+    "httpClients": [],
+    "wsServers": [
+      {
+        "name": "ws-default",
+        "enabled": true,
+        "host": "0.0.0.0",
+        "port": 3001,
+        "path": "/",
+        "role": "Universal",
+        "accessToken": "CHANGE_ME_onebot_token",
+        "messageFormat": "array",
+        "reportSelfMessage": false
+      }
+    ],
+    "_wsClients_comment": "Only needed for a reverse-WS consumer such as AstrBot. With SurfCore the bridge connects OUT to ws://snowluma:3001, so this array stays empty. Leaving a dead entry here makes SnowLuma log 'ENOTFOUND astrbot' every 5 seconds.",
+    "wsClients": []
+  },
+  "musicSignUrl": ""
+}

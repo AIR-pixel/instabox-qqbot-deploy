@@ -1,0 +1,45 @@
+{
+  "_comment": "Template for /data/qqbot/surfcore/config.json. Change every CHANGE_ME. The bridge reads this ONCE at startup and has no fs.watch - always `sudo systemctl restart surfcore-bridge.service` after editing (docs/06-pitfalls.md P-11).",
+  "dsh": {
+    "baseUrl": "http://127.0.0.1:3080",
+    "_baseUrl_comment": "MUST be a loopback address. The bridge only mints its dsh-auth cookie when isLoopbackBase() is true; a container service name here means every request gets 401 and the bridge stuck at 'DSH not ready'.",
+    "provider": "workbuddy",
+    "model": "deepseek-v4.1-flash",
+    "reasoningEffort": "low",
+    "followDefaultModel": false,
+    "authToken": "",
+    "authHeader": "authorization",
+    "authPrefix": "Bearer",
+    "allowRemote": false
+  },
+  "snowluma": {
+    "wsUrl": "ws://snowluma:3001",
+    "httpUrl": "http://snowluma:3000",
+    "accessToken": "CHANGE_ME_onebot_token",
+    "followDiscoveredEndpoint": false,
+    "allowLaunch": false
+  },
+  "ownerQQ": "1000000001",
+  "agentPreset": "qq-chat",
+  "workspaceTitle": "QQ chat",
+  "consolePort": 3100,
+  "consoleToken": "",
+  "_consoleToken_comment": "Empty = generated on every start into state/console-token. Console auth accepts ONLY ?token= or the X-Console-Token header; Authorization: Bearer gets 401.",
+  "allow": {
+    "private": ["1000000001"],
+    "groups": [],
+    "allowAllWhenEmpty": false
+  },
+  "_allow_comment": "Anything not listed is dropped before it ever reaches the model. This is the #1 cause of 'the bot ignores me'.",
+  "socialV2": {
+    "enabled": true,
+    "wake": {
+      "maxWakePerMinute": 6,
+      "maxWakePerHour": 120,
+      "noActionLimit": 1000,
+      "preSleepWaitMs": 300000,
+      "batchWindowMs": 8000
+    }
+  },
+  "_socialV2_comment": "noActionLimit is the sneaky one: at the default 3, a few 'woke up but said nothing' rounds silently reset wakeConfig back to probability 0.05."
+}

@@ -1,0 +1,23 @@
+# Ignore secrets and local state
+.env
+*.bak
+*.bak-*
+secrets/
+.credentials.yaml
+workbuddy-vault/
+state/
+logs/
+*.log
+
+# Ignore OS / editor noise
+.DS_Store
+Thumbs.db
+desktop.ini
+.vscode/
+.idea/
+
+# Ignore large or machine-specific payloads
+*.tar
+*.tar.gz
+voice-packs/
+node_modules/

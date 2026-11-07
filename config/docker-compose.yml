@@ -1,0 +1,116 @@
+name: qqbot
+
+# Plan B stack. Only ONE service is mandatory: snowluma (the real QQ client).
+# The reasoning backend (DSH Web) and the bridge (SurfCore) run as host systemd
+# units, NOT as containers -- they must share the host network namespace and
+# talk over 127.0.0.1, because the bridge only mints its DSH auth cookie when
+# the base URL is a loopback address (docs/01-architecture.md 1.1).
+#
+# Run from /data/qqbot/compose:
+#   docker compose --env-file .env up -d snowluma
+#
+# Management ports bind to 127.0.0.1 only -> reach them via `instabox port-forward`.
+# OneBot 3000/3001 are NOT published; they are internal DNS names on `qqbot`.
+
+x-restart: &restart
+  restart: unless-stopped
+
+services:
+  snowluma:
+    <<: *restart
+    image: ${SNOWLUMA_IMAGE:-motricseven7/snowluma:latest}
+    container_name: ${SNOWLUMA_CONTAINER:-snowluma}
+    shm_size: 1gb
+    ulimits:
+      nofile:
+        soft: 65536
+        hard: 1048576
+    # MANDATORY. Without ptrace + unconfined seccomp the hook cannot inject
+    # into the real QQ (Chromium) process and OneBot never reports in.
+    cap_add:
+      - SYS_PTRACE
+    security_opt:
+      - seccomp=unconfined
+    environment:
+      VNC_PASSWD: ${VNC_PASSWD:?set VNC_PASSWD in .env}
+      SNOWLUMA_ONEBOT_HOST: 0.0.0.0
+      SNOWLUMA_UID: ${SNOWLUMA_UID:-1000}
+      SNOWLUMA_GID: ${SNOWLUMA_GID:-1000}
+      SNOWLUMA_WEBUI_HOST: 0.0.0.0
+      SNOWLUMA_WEBUI_PORT: ${SNOWLUMA_WEBUI_PORT:-5099}
+      SNOWLUMA_LOG_LEVEL: info
+      SNOWLUMA_SCREEN: 1920x1080x24
+      SNOWLUMA_HOOK_AUTOLOAD: 1
+      SNOWLUMA_EXTRA_QQ_HOMES: ""
+      TZ: ${TZ:-Asia/Shanghai}
+      # QQ Chromium launch flags, injected by supervisord as
+      #   command=qq --no-sandbox %(ENV_SNOWLUMA_QQ_FLAGS)s
+      #
+      # The image default disabled BOTH the GPU and the software rasterizer,
+      # leaving no paint path on a headless Xvfb screen: the login window
+      # stayed a blank gray box with no QR code (renderer never painted).
+      # Dropping --disable-software-rasterizer restores Skia CPU painting;
+      # --enable-unsafe-swiftshader covers WebGL-based QR on Electron 40.
+      SNOWLUMA_QQ_FLAGS: "${SNOWLUMA_QQ_FLAGS:---disable-gpu --disable-gpu-compositing --enable-unsafe-swiftshader --disable-dev-shm-usage}"
+    ports:
+      - "127.0.0.1:${NOVNC_PORT:-6081}:6081"                                    # noVNC: scan QR
+      - "127.0.0.1:${SNOWLUMA_WEBUI_PORT:-5099}:${SNOWLUMA_WEBUI_PORT:-5099}"   # WebUI: OneBot networks
+      # 3000 / 3001 intentionally NOT published. Exposing OneBot to the
+      # internet with a leaked token = handing over the QQ account.
+    volumes:
+      - qq-gateway-data:/app/data
+      - qq-client-config:/app/.config
+      - qq-client-data:/app/.local/share   # holds the QQ login state: snapshot this
+    networks:
+      - qqbot
+
+  # ---------------------------------------------------------------- optional
+  # Deprecated. Kept ONLY so `docker compose stop astrbot` has a target.
+  # Running it alongside SurfCore causes DOUBLE REPLIES (both subscribe to the
+  # same QQ event stream) and floods the SnowLuma log with
+  # "getaddrinfo ENOTFOUND astrbot" every 5 seconds.
+  astrbot:
+    <<: *restart
+    image: ${ASTRBOT_IMAGE:-soulter/astrbot:latest}
+    container_name: astrbot
+    profiles: ["legacy"]
+    environment:
+      TZ: ${TZ:-Asia/Shanghai}
+    ports:
+      - "127.0.0.1:${ASTRBOT_WEBUI_PORT:-6185}:6185"
+      # 6199 is a reverse-WS SERVER; SnowLuma would connect to it in-network,
+      # so it never needs a host port.
+    volumes:
+      - ../astrbot/data:/AstrBot/data
+      - /etc/localtime:/etc/localtime:ro
+    networks:
+      - qqbot
+
+  # Deprecated AND risky: it routes LLM traffic through the account owner's own
+  # DeepSeek credentials. With AstrBot gone it has no consumer.
+  # See docs/07-optional.md 7.2.
+  llm-gateway:
+    <<: *restart
+    image: ${LLM_GATEWAY_IMAGE:-qqbot/llm-gateway:1.2.1}
+    container_name: llm-gateway
+    profiles: ["legacy"]
+    environment:
+      DSH_HOME: /secrets
+      GATEWAY_PORT: ${GATEWAY_PORT:-8790}
+      GATEWAY_TOKEN: ${GATEWAY_TOKEN:-CHANGE_ME_gateway_token}
+      GATEWAY_DEFAULT_MODEL: deepseek-flash
+    volumes:
+      - ../secrets/.credentials.yaml:/secrets/.credentials.yaml:ro
+    expose:
+      - "8790"
+    networks:
+      - qqbot
+
+networks:
+  qqbot:
+    driver: bridge
+
+volumes:
+  qq-gateway-data:
+  qq-client-config:
+  qq-client-data:
