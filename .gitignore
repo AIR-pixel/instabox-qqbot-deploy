@@ -21,3 +21,10 @@ desktop.ini
 *.tar.gz
 voice-packs/
 node_modules/
+
+# Ignore local tooling used to publish this repo
+.gh-token.json
+.gcm-login.txt
+.gcm-login.txt.err
+_gh_device_poll.py
+repo-list.json
