@@ -50,6 +50,9 @@ docs/07-optional.md       ★ 非必需组件
 docs/08-facts.md          平台事实表
 docs/09-full-walkthrough.md  全链路实录（含保活与上传流程）
 scripts/                  healthcheck / postscan / 保活
+  keepalive-cycle.ps1       85 min suspend -> resume（治 max-run）
+  keepalive-heartbeat.ps1   20 min 真 exec（治 30 分钟空闲暂停）
+  install-task.ps1          同时注册上面两个计划任务
 config/                   配置模板（含占位符）
 ```
 

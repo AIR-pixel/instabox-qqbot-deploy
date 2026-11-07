@@ -417,6 +417,53 @@ Get-State
 **代价必须说清**：每 85 分钟约 20 秒离线。真 7×24 只有三条路——升 Pro、
 机器人放回本机常驻、或接受周期性空窗。Free 档物理限制绕不过去，只是选哪种代价。
 
+### 4.5 上线次日补的一条：20 分钟心跳（实测翻车记录）
+
+次日 20:51（北京时间）机器人又整段不说话。查下来**不是桥坏了**：
+两 systemd 均 active、`snowluma Up 35 hours`、`get_login_info` 正常、
+`healthcheck-b.sh` 九项全 `PASS (fail=0)`、`ss` 里 3001 的 ESTAB 也在。
+真因是 `instabox get test --json` 显示：
+
+```
+state=suspended  desired=suspended  runtime.ready=false
+processesPreserved=true  runStartedAt=null
+autoSuspendedAt=2026-11-07T12:51:53.455875Z   # 北京 20:51:53
+autoSuspendAfterSeconds=1800
+```
+
+也就是**整台机器被 30 分钟空闲暂停掐了**，桥进程和内存都还在，只是没在跑。
+`resume test` 后 `21:05:44Z` 回到 running，桥日志立刻
+`21:05:55 ✅ SnowLuma 上游已恢复正常`，`21:05:59` / `21:06:08` 两条消息就发出去了。
+
+复盘发现 4.3 的方案**只治了两条限制中的一条**：
+
+| 限制 | 谁能重置 |
+|---|---|
+| max-run / dynamic runtime（2h 窗口、连击计数） | 85 分钟 `suspend → 20s → resume`，换 run |
+| **30 分钟空闲暂停**（`autoSuspendAfterSeconds: 1800`） | 真 work：exec / file read / SSH / public port 请求 / task lease |
+
+85 分钟 cycle 中间那段没有任何 exec —— 桥的 10 分钟 B站记忆刷新、
+几十分钟一次的主动机会检查都**不算 busy**；而官方明确
+*"Listing machines, reading one, and reading its logs never wake it."*
+所以 `keepalive.log` 里 17:00 / 18:26 / 19:50 三轮全走
+`machine not running (state=suspended); trying resume instead of cycle` 兜底分支，
+变成「睡 55 分钟、被叫醒一次、再睡」。
+
+修法：**两个任务并行**，写入 `scripts/install-task.ps1`（默认 `-Mode both`）：
+
+| 任务 | 频率 | 动作 |
+|---|---|---|
+| `InstaBox-Keepalive` | 85 min | `keepalive-cycle.ps1`：suspend → 20s → resume |
+| `InstaBox-Keepalive-Heartbeat` | **20 min** | `keepalive-heartbeat.ps1`：`instabox exec <MACHINE> -- true`（3 次重试） |
+
+`true` 是最小代价的真 work，还能顺带把已 suspended 的机器唤醒。
+实跑 `21:12:24 [heartbeat] exec ok, idle counter reset` exit=0，两任务均 Ready。
+详见 `06-pitfalls.md` **P-21**。
+
+**这一条的教训**：把「换 run 保活」当成了「保活」的全部。
+任何周期性 suspend/resume 方案都必须配一条频率 < 30 分钟的真 work 心跳，
+否则空闲暂停会在两个周期之间把机器掐掉。
+
 ---
 
 ## 5. 与仓库内其它文档的关系
@@ -426,7 +473,7 @@ Get-State
 | 立刻照着做 | `03-runbook.md` |
 | 判断成功 / 失败往哪查 | `04-verification.md` |
 | 保活机制细节与取舍 | `05-keepalive.md` |
-| 某条报错怎么修 | `06-pitfalls.md`（P-01..P-20） |
+| 某条报错怎么修 | `06-pitfalls.md`（P-01..P-21） |
 | B站分享 / 群唤醒 / WorkBuddy 等可选件 | `07-optional.md` |
 | 平台 API、限额、状态机 | `08-facts.md` |
 | 本文（为什么这么设计、当时实测值） | `09-full-walkthrough.md` |

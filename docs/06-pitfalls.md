@@ -1,6 +1,6 @@
 # 06 踩坑库
 
-每条格式：**症状 → 根因 → 修法**。按"会卡住你的顺序"排列，P-01..P-20。
+每条格式：**症状 → 根因 → 修法**。按"会卡住你的顺序"排列，P-01..P-21。
 带 ★ 的是必须知道，不知道一定会卡。
 
 ---
@@ -483,6 +483,57 @@ for ($i=0; $i -lt 3; $i++) {
 ```
 
 **判成功的依据是退出码与目标端校验**（`sha256sum`），不是 stderr 有没有字。
+
+---
+
+## P-21 ★ 85 分钟周期保活仍会被 30 分钟空闲暂停掐掉
+
+**症状**：`suspend → 20s → resume` 的 85 分钟计划任务每次都成功（日志里 `suspend -> HTTP 202` /
+`resume -> HTTP 202` / `LastTaskResult=0`），但机器还是每隔几十分钟 `state=suspended`，
+QQ 机器人整段时间不回话。保活日志反复出现：
+
+```
+before: state=suspended desired=suspended runStartedAt=
+machine not running (state=suspended); trying resume instead of cycle
+resume -> HTTP 202
+```
+
+**根因**：把两条独立的限制当成了一条。
+
+| 限制 | 触发条件 | 谁能重置 |
+|---|---|---|
+| 30 分钟空闲暂停 | `autoSuspendAfterSeconds: 1800`，Free 写死不可改 | 真 work：exec / file read / SSH / 请求 public port / task lease |
+| max-run / dynamic runtime | 单 run 到 2 小时窗口或 8 小时上限 | **周期 suspend→resume**（换 run） |
+
+桥在空闲时只跑 10 分钟一次的 B站记忆刷新、几十分钟一次的主动机会检查，
+`healthcheck-b.sh` 九项全绿、两 systemd 都 active、QQ 也在线 —— **但这些都不算 work**。
+`keepalive-cycle.ps1` 每 85 分钟才触发一次，中间那段 85 分钟里没有任何 exec，
+30 分钟空闲到点就 suspend。此时 cycle 只能走「非 running → 直接 resume」的兜底分支，
+于是变成"睡了 55 分钟、被叫醒一次、再睡"，完全失去原本的节奏。
+
+实测：`autoSuspendedAt=2026-11-07T12:51:53Z`（北京 20:51:53），
+桥日志 `21:05:43 ⚠️ SnowLuma 上游不健康：已连接但 14 分钟没有收到任何事件包`，
+`21:05:55 ✅ SnowLuma 上游已恢复正常` —— resume 后事件流立刻回血，
+进程与内存都保留（`processesPreserved=true`），**不是桥死了，是整台机器睡了**。
+
+**修法**：两个任务并行，缺一不可。
+
+| 任务 | 频率 | 做什么 | 治哪条 |
+|---|---|---|---|
+| `InstaBox-Keepalive` | 85 min | `suspend → 20s → resume` | max-run / dynamic runtime 连击 |
+| `InstaBox-Keepalive-Heartbeat` | **20 min** | 一次真实 `instabox exec <MACHINE> -- true` | 30 分钟空闲暂停 |
+
+心跳脚本（`keepalive-heartbeat.ps1`）：纯 ASCII、3 次重试、成功写
+`[heartbeat] exec ok, idle counter reset`，注册用 `New-ScheduledTaskTrigger -Once -RepetitionInterval 20 min`。
+`true` 是最小代价的真 work，同时还能把已经 suspended 的机器唤醒。
+
+**为什么不能靠高频 `GET /v1/machines`**：官方明确
+*"Listing machines, reading one, and reading its logs never wake it."*
+读状态既不重置 idle，也不唤醒；必须是一次 `exec`。
+
+**验证**：`keepalive.log` 里应能看到每 20 分钟一条 `[heartbeat] exec ok`，
+且 `GET /v1/machines/<ID>` 的 `autoSuspendedAt` 不再持续刷新、
+`runtime.ready=true` 期间 `state` 稳定为 `running`。
 
 ---
 
