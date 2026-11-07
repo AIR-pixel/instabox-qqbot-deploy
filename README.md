@@ -26,6 +26,7 @@ snowluma 容器 (真实 QQ + OneBot v11)  ←→  surfcore 桥 (宿主 systemd) 
 5. `docs/06-pitfalls.md` — **本仓库最贵的部分**。20 条踩坑，每条带症状/根因/修法。
 6. `docs/07-optional.md` — 哪些是锦上添花（B站分享、WorkBuddy 多账号、AstrBot 遗留），非必需。
 7. `docs/08-facts.md` — 平台 API / 限额 / 状态机事实表，写实现时查。
+8. `docs/09-full-walkthrough.md` — **全链路实录**：从本机到 VPS 到常驻，含传输、逐层配置、实测返回值与保活决策理由。想理解「为什么这么设计」读这个。
 
 ## 实测基线（这套流程验证过的形态）
 
@@ -47,6 +48,7 @@ docs/05-keepalive.md      免费档保活
 docs/06-pitfalls.md       ★ 踩坑库
 docs/07-optional.md       ★ 非必需组件
 docs/08-facts.md          平台事实表
+docs/09-full-walkthrough.md  全链路实录（含保活与上传流程）
 scripts/                  healthcheck / postscan / 保活
 config/                   配置模板（含占位符）
 ```
